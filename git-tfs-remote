@@ -1,0 +1,168 @@
+#!/bin/sh
+
+ME=$(basename "$0")
+
+usage () {
+	cat <<EOF
+
+Usage: $ME [-h|-help] | -v[erbose] ( bootstrap | add [<TFS Remote Name>] )
+
+  Options
+  =======
+
+  -h, -help
+
+        Show this usage text
+
+  -v
+  --verbose
+
+        Be a little more verbose and show the TFS repository name and url after
+        the TFS remote name. NOTE: This option must be placed before any
+        sub-commands.
+
+
+  Commands
+  ========
+
+  bootstrap
+
+        Uses Git-TFS to bootstrap the current branch with a TFS branch and then
+        updates your repository configuration with the bootstrapped TFS remote
+        name so that you can use git-tfs-sync.
+
+
+  add [<TFS Remote Name>]
+
+        Adds a TFS remote for the currently checked out branch, but does not
+        bootstrap the branch with Git-TFS. This is useful when the branch has
+        already been bootstrapped by Git-TFS and you now want to be able to use
+        the git-tfs-sync command. Before you can use the git-fs-sync command,
+        configuration must be added about the Git-TFS remote to be used for
+        synchronization.
+
+        When running this command without specifying the name of a TFS remote
+        tracking branch, the name of the current branch will be used in an 
+        attempt to detect the name of a Git-TFS remote to track. If a Git-TFS
+        remote is found, additional configuration entries for the local
+        repository will be made so that git-tfs-sync can be used. If no TFS
+        remote can be found with the name of the current branch, an error will
+        be returned. In this case, you must specify a <TFS Remote Name>.
+
+        When you specify the name of a TFS remote, this command will add the
+        specified TFS remote for the current branch.
+
+        WARNING: Specifying <TFS Remote Name> assumes you know what you're
+                 you're doing and does not attempt to make sure that the TFS
+                 remote should or can be added to the current branch. The name
+                 you specify will be added to the repository configuration for
+                 use with git-tfs-sync.
+
+EOF
+	exit 1
+}
+
+die () {
+	echo "$*" >&2
+	exit 1
+}
+
+add_git_tfs_remote () {
+	git config --local git-tfs-branch."$1".remote "$2" || die "
+$(tput setaf 1)ERROR: Unable to update local repository configuration to record
+       the TFS remote for '$1'.$(tput sgr0)
+"
+}
+
+get_tfs_remote_info () {
+	echo "$(git config --local --get tfs-remote."$1".$2)"
+}
+
+display_tfs_remote_info() {
+	TFS_REMOTE_NAME="$(git config --local --get git-tfs-branch."$1".remote)"
+
+	test -n "$TFS_REMOTE_NAME" || die "
+This branch is not tracking any TFS remotes.
+"
+
+	echo -e "$TFS_REMOTE_NAME\t$(get_tfs_remote_info "$TFS_REMOTE_NAME" url) (url)"
+	echo -e "$TFS_REMOTE_NAME\t$(get_tfs_remote_info "$TFS_REMOTE_NAME" repository) (repository)"
+}
+
+FOUND_GIT_TFS="f"
+VERBOSE="f"
+OPERATION=
+BRANCH=
+TFS_REMOTE_NAME=
+
+FOUND_GIT_TFS="$(which git-tfs)" && test ! "$FOUND_GIT_TFS" = "f" || die "
+$(tput setaf 1)ERROR: git-tfs could not be found. Please ensure you installed git-tfs and that
+git-tfs.exe is in your PATH.$(tput sgr0)
+"
+BRANCH="$(git rev-parse --abbrev-ref  HEAD)"
+
+# If the user wishes to display output verbosely, it must be specified
+# before all other sub-commands. This is keeping in line with how the
+# native `git remote` command works.
+case $1 in
+	-v|--verbose)
+		VERBOSE="t"
+		shift
+	;;
+esac
+
+for arg
+do
+	case $1 in
+		bootstrap)
+			OPERATION="$1"
+			shift
+			;;
+		add)
+			OPERATION="$1"
+			shift
+			test $# = 0 || {
+				TFS_REMOTE_NAME="$1" && \
+				shift
+			}
+			;;
+		*)
+			usage
+	esac
+done
+
+test -z "$OPERATION" || {
+	case $OPERATION in
+		add)
+			# If no arguments are given, check to see if there's a TFS remote with the same
+			# name as the current branch. If so, then use the current branch name as the
+			# TFS remote name.
+			test -n "$TFS_REMOTE_NAME" || {
+				TFS_REMOTE_NAME="$BRANCH"
+				get_tfs_remote_info "$TFS_REMOTE_NAME" repository >/dev/null || die "
+$(tput setaf 1)ERROR: Unable to find a TFS remote named:$(tput sgr0)
+
+    $(tput setaf 12)$TFS_REMOTE_NAME$(tput sgr0)
+
+If your local branch name is different than the name of the TFS remote branch
+you're trying to track, please specify the name of the TFS branch to add as a
+remote tracking branch.
+
+See '$ME -help' for more information.
+"
+			}
+			;;
+
+		bootstrap)
+			TFS_REMOTE_NAME="$(git tfs bootstrap | grep "existing remote" | sed -e 's/.*remote \(.*\)\( (up to date)\)/\1/')"
+			test -n "$TFS_REMOTE_NAME" || die "
+$(tput setaf 1)ERROR: Unable to bootstrap '$BRANCH'$(tput sgr0)
+"
+			test "$TFS_REMOTE_NAME" = "$BRANCH" || echo "WARNING: your TFS Remote name does not match your branch name."
+			;;
+	esac
+
+	add_git_tfs_remote "$BRANCH" "$TFS_REMOTE_NAME"
+} && test "$VERBOSE" = "f" || display_tfs_remote_info "$BRANCH"
+
+exit 0

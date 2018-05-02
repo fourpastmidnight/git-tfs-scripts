@@ -1,0 +1,273 @@
+#!/bin/sh
+
+ME=$(basename "$0")
+
+usage () {
+        cat <<EOF
+
+Usage: $ME <destination_branch>
+
+  This command merges the currently checked out git branch, whose parent is a
+  branch associated with a TFS remote, to <destination_branch> using the
+  Git-TFS rcheckin command.
+
+  This script will peform the following actions:
+
+    1. Ensures <destination_branch> is a branch associated with a Git-TFS TFS
+       remote.
+    2. Ensures your local copy of <destination_branch> is up-to-date with TFS
+         - Any changes brought down will be pushed to <destination_branch>'s
+           remote tracking branch.
+    3. If <destination_branch> was updated, the current branch will be rebased
+       on top of <destination_branch>
+    4. Your branch's commits will be replayed to the TFS remote for
+       <destination_branch> as TFS changesets
+    5. Your local copy of <destination_branch> will be updated from TFS again
+    6. The new changesets will be pushed to the remote tracking branch for
+       <destination_branch>
+    7. The local branch you merged will be deleted
+    8. The remote tracking branch associated with your local branch will be
+       deleted.
+
+EOF
+        exit 1
+}
+
+die () {
+        test $# -gt 0 || echo "$(tput setaf 1)Failed to merge '$SRC_BRANCH' into '$DEST_BRANCH'.$(tput sgr0)" >&2 && echo "$*" >&2
+        exit 1
+}
+
+write_info () {
+        echo "
+$(tput setaf 14)$*$(tput sgr0)"
+}
+
+write_warning () {
+        echo "
+$(tput setaf 11)$*$(tput sgr0)" >&2
+}
+
+not_rebasing() {
+        local retVal;
+        test ! -d "${GIT_DIR:-.git}"/rebase-apply
+        retVal=$?
+        exit $retVal
+}
+
+get_upstream() {
+        test $# = 2 || exit 1
+
+        case $1 in
+                --remote|-r)
+                        echo "$2" | sed -e 's|\([^/]*\)/\(.*\)|\1|' ;;
+                --branch|-b)
+                        echo "$2" | sed -e 's|\([^/]*\)/\(.*\)|\2|' ;;
+        esac
+}
+
+test $# = 1 || usage
+
+FOUND_GIT_TFS=
+SRC_BRANCH=
+SRC_BRANCH_UPSTREAM=
+DEST_BRANCH=
+DEST_BRANCH_UPSTREAM=
+DEST_BRANCH_TFS=
+REBASING_MSG="
+$(tput setaf 1)ERROR: Rebase in progress. Please finish the rebase operation in progress or
+abort the rebase and try again.$(tput sgr0)
+"
+
+case $1 in
+        -h|-help)
+                usage
+                ;;
+        *)
+                FOUND_GIT_TFS="$(which git-tfs)" && test -n "$FOUND_GIT_TFS" || die "
+$(tput setaf 1)ERROR: git-tfs could not be found. Please ensure you installed git-tfs and that
+git-tfs.exe is in your PATH.$(tput sgr0)
+"
+                DEST_BRANCH_TFS=$(git config --local --get tfs-remote."$(git config --local --get git-tfs-branch."$1".remote)".repository) || die "
+$(tput setaf 1)ERROR: '$1' is not associated with a Git-TFS remote.$(tput sgr0)
+Did you forget to issue a $(tput setaf 13)'git tfs bootstrap'$(tput sgr0) command on '$1'?
+See '$ME -help' for more information.
+"
+                SRC_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+                SRC_BRANCH_UPSTREAM="$(git rev-parse --abbrev-ref "$SRC_BRANCH"@{u})"
+                DEST_BRANCH="$1"
+                DEST_BRANCH_UPSTREAM="$(git rev-parse --abbrev-ref "$DEST_BRANCH"@{u})"
+                echo
+                ;;
+esac
+
+test -n "$(get_upstream -b "$SRC_BRANCH_UPSTREAM")" || die "$(tput setaf 1)ERROR: '$SRC_BRANCH' is not tracking a remote branch.$(tput sgr0)
+Please issue the following command to setup a remote tracking branch for
+'$SRC_BRANCH':
+
+    git branch --set-upstream-to=<remote_name>/<remote_branch_name>
+
+For example:
+
+    git branch --set-upstream-to=origin/feature/my-topic-branch
+
+"
+
+test ! "$SRC_BRANCH" = "$DEST_BRANCH" || die "$(tput setaf 1)ERROR: Cannot merge '$DEST_BRANCH' to '$DEST_BRANCH_TFS'$(tput sgr0)"
+
+cat <<EOF
+Branch Information
+===============================================================================
+Local source branch name:           $SRC_BRANCH
+Upstream source branch remote:      $(get_upstream -r "$SRC_BRANCH_UPSTREAM")
+Upstream source branch name:        $(get_upstream -b "$SRC_BRANCH_UPSTREAM")
+
+Local destination branch name:      $DEST_BRANCH
+Upstream destination branch remote: $(get_upstream -r "$DEST_BRANCH_UPSTREAM")
+Upstream destination branch name:   $(get_upstream -b "$DEST_BRANCH_UPSTREAM")
+Destination branch TFS remote:      $DEST_BRANCH_TFS
+EOF
+
+test "$SRC_BRANCH" = "$(get_upstream -b "$SRC_BRANCH_UPSTREAM")" || (
+        CONTINUE=n
+        read -n 1 -p "
+$(tput setaf 11)WARNING:$(tput sgr0) Your local branch name:
+
+        $(tput setaf 10)'$SRC_BRANCH'$(tput sgr0)
+
+    is different than the remote tracking branch name:
+
+        $(tput setaf 9)'$SRC_BRANCH_UPSTREAM'$(tput sgr0)
+
+Please ensure the branch information above is correct before continuing.
+
+$(tput setaf 15)Do you want to continue merging?$(tput sgr0) [y|$(tput setaf 11)N$(tput sgr0)] ? " CONTINUE
+
+        case "$CONTINUE" in
+                y|Y)    echo
+                        exit 0
+                        ;;
+                *)
+                        exit 1
+                        ;;
+        esac
+) || die "
+
+$(tput setaf 1)Merging canceled.$(tput sgr0)
+"
+
+(case "$DEST_BRANCH" in
+        "develop"|"master")
+                CONTINUE=n
+                read -n 1 -p "
+$(tput setaf 11)WARNING:$(tput sgr0) You are merging to $(tput setaf 13)'$DEST_BRANCH'$(tput sgr0), are you sure (y|$(tput setaf 15)N$(tput sgr0))? " CONTINUE
+                case "$CONTINUE" in
+                        y|Y)    echo
+                                exit 0
+                                ;;
+                        *)
+                                exit 1
+                                ;;
+                esac
+        ;;
+esac) || die "
+
+$(tput setaf 1)Merging canceled.$(tput sgr0)
+"
+
+# Update the local copy of the destination branch from the git server
+(write_info "Updating '$DEST_BRANCH' with any upstream commits" &&
+        (
+                git checkout "$DEST_BRANCH" && \
+                git fetch && \
+                git rebase "$DEST_BRANCH_UPSTREAM" && \
+                not_rebasing
+        ) || die "$REBASING_MSG"
+) || die
+
+# Update the local copy of the destination branch with any changesets in TFS but not in git
+(write_info "Updating '$DEST_BRANCH' with any new changesets from '$DEST_BRANCH_TFS'" && \
+        (
+                git tfs pull -x -r && \
+                not_rebasing
+        ) || die "$REBASING_MSG"
+) || die
+
+# At this point we can minimally push the new TFS changes to origin
+(write_info "Updating '$DEST_BRANCH_UPSTREAM' with any new commits on '$DEST_BRANCH'" && \
+        git push $(get_upstream -r "$DEST_BRANCH_UPSTREAM") refs/notes/*:refs/notes/* "$DEST_BRANCH":"$(get_upstream -b "$DEST_BRANCH_UPSTREAM")"
+) || die
+
+# Rebase the local topic branch on top of the local copy of the destination branch
+(write_info "Rebasing '$SRC_BRANCH' on '$DEST_BRANCH' and updating '$SRC_BRANCH_UPSTREAM'" &&
+        (
+                git checkout "$SRC_BRANCH" && \
+                git rebase "$DEST_BRANCH" && \
+                not_rebasing && \
+                git push $(get_upstream -r "$SRC_BRANCH_UPSTREAM") +"$SRC_BRANCH":"$(get_upstream -b "$SRC_BRANCH_UPSTREAM")"
+        ) || die "$REBASING_MSG"
+) || die
+
+# Replay each commit and checkin each commit to TFS
+(write_info "Checking in '$SRC_BRANCH' to '$DEST_BRANCH_TFS'" && git tfs rcheckin) || die
+
+# Rebase the local copy of the destination branch on top of the remote TFS branch
+write_info "Pulling from '$DEST_BRANCH_TFS' into '$DEST_BRANCH'" &&
+(
+        git checkout "$DEST_BRANCH" && \
+        git tfs pull -x -r && \
+        not_rebasing
+) || \
+die "$(write_warning "WARNING: Encountered an error while pulling from '$DEST_BRANCH_TFS'.
+The branch '$SRC_BRANCH' was successfully merged into '$DEST_BRANCH'.
+However, no other clean up operations will be performed.
+Please resolve the issue and run the following commands:
+
+    $ git tfs pull -x -r
+    $ git push $(get_upstream -r "$DEST_BRANCH_UPSTREAM") refs/notes/*:refs/notes/* "$DEST_BRANCH":"$(get_upstream -b "$DEST_BRANCH_UPSTREAM")"
+    $ git branch -f "$SRC_BRANCH" "$DEST_BRANCH"
+    $ git push $(get_upstream -r "$SRC_BRANCH_UPSTREAM") +"$SRC_BRANCH":"$(get_upstream -b "$SRC_BRANCH_UPSTREAM")"
+    $ git push $(get_upstream -r "$SRC_BRANCH_UPSTREAM") :"$(get_upstream -b "$SRC_BRANCH_UPSTREAM")"
+    $ git branch -d "$SRC_BRANCH"
+")"
+
+# Push the updated local copy of the destination branch to the Git server
+(write_info "Updating '$SRC_BRANCH_UPSTREAM' with '$SRC_BRANCH' and
+'$DEST_BRANCH_UPSTREAM' with '$DEST_BRANCH'" && \
+        git branch -f "$SRC_BRANCH" "$DEST_BRANCH" && \
+        git push $(get_upstream -r "$SRC_BRANCH_UPSTREAM") +"$SRC_BRANCH":"$(get_upstream -b "$SRC_BRANCH_UPSTREAM")" && \
+        git push $(get_upstream -r "$DEST_BRANCH_UPSTREAM") refs/notes/*:refs/notes/* "$DEST_BRANCH":"$(get_upstream -b "$DEST_BRANCH_UPSTREAM")" 
+) || \
+die "$(write_warning "WARNING: Encountered an error while updating branches.
+
+The branch '$SRC_BRANCH' was successfully merged into '$DEST_BRANCH'.
+However, no other clean up operations will be performed.
+Please ensure everything is OK and then run the following commands:
+
+    $ git push $(get_upstream -r "$DEST_BRANCH_UPSTREAM") refs/notes/*:refs/notes/* "$DEST_BRANCH":"$(get_upstream -b "$DEST_BRANCH_UPSTREAM")"
+    $ git branch -f "$SRC_BRANCH" "$DEST_BRANCH"
+    $ git push $(get_upstream -r "$SRC_BRANCH_UPSTREAM") +"$SRC_BRANCH":"$(get_upstream -b "$SRC_BRANCH_UPSTREAM")"
+    $ git push $(get_upstream -r "$SRC_BRANCH_UPSTREAM") :"$(get_upstream -b "$SRC_BRANCH_UPSTREAM")"
+    $ git branch -d "$SRC_BRANCH"
+")"
+
+(write_info "Deleting '$SRC_BRANCH'" && \
+        git checkout "$DEST_BRANCH" && \
+        git branch -d "$SRC_BRANCH"
+) || \
+write_warning "WARNING: Unable to delete '$SRC_BRANCH'."
+
+(write_info "Deleting '$SRC_BRANCH_UPSTREAM'" && \
+        git push $(get_upstream -r "$SRC_BRANCH_UPSTREAM") :"$SRC_BRANCH"
+) || \
+write_warning "WARNING: Unable to delete the remote branch '$SRC_BRANCH_UPSTREAM'.
+Please ensure everything is OK and then run the following command:
+
+    git push $(get_upstream -r "$SRC_BRANCH_UPSTREAM") :\"$SRC_BRANCH\"
+"
+
+echo "
+$(tput setaf 10)SUCCESS: Checked in '$SRC_BRANCH' to '$DEST_BRANCH_TFS',
+updated '$DEST_BRANCH',
+and '$DEST_BRANCH_UPSTREAM'.$(tput sgr0)
+"

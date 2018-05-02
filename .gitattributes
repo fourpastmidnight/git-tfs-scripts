@@ -1,0 +1,3 @@
+* eol=lf
+*.md eol=crlf whitespace=-blank-at-eol
+*.txt eol=crlf

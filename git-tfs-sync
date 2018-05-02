@@ -1,0 +1,180 @@
+#!/bin/sh
+
+ME=$(basename "$0")
+
+usage () {
+        cat <<EOF
+
+Usage: $ME [-h|--help] [-v]
+
+  Options
+  =======
+  -h, --help
+  	Show this usage text
+
+  -v
+  	Verbose. Show extra output to aid in debugging.
+
+  This command will ensure that a Git branch which has a corresponding TFS
+  remote is synchronized with TFS and the branch's Git remote in the correct
+  order to prevent Git commit hash sequencing problems.
+
+  Whenever you need to update a local Git branch which has a corresponding TFS
+  remote, use this command instead of the standard fetch or pull commands or
+  even Git-TFS fetch or pull commands.
+
+  If the sequence of fetches or pulls is not performed in the correct order,
+  the effect would be the same as rebasing a public, shared Git branch,
+  possibly causing others to lose work or not be able to synchronize with the
+  Git remote.
+
+EOF
+        exit 1
+}
+
+die () {
+        echo "$*" >&2
+        exit 1
+}
+
+write_info () {
+        echo "
+$(tput setaf 14)$*$(tput sgr0)"
+}
+
+not_rebasing() {
+        local retVal;
+        test ! -d "${GIT_DIR:-.git}"/rebase-apply
+        retVal=$?
+        exit $retVal
+}
+
+get_upstream() {
+        test $# = 2 || exit 1
+
+        case $1 in
+                --remote|-r)
+                        echo "$2" | sed -e 's|\([^/]*\)/\(.*\)|\1|' ;;
+                --branch|-b)
+                        echo "$2" | sed -e 's|\([^/]*\)/\(.*\)|\2|' ;;
+        esac
+}
+
+FOUND_GIT_TFS="f"
+VERBOSE="f"
+BRANCH=
+BRANCH_UPSTREAM=
+BRANCH_TFS=
+REBASING_MSG="
+$(tput setaf 1)ERROR: Rebase in progress. Please finish the rebase operation in progress or
+abort the rebase and try again.$(tput sgr0)
+"
+
+for arg
+do
+	case $1 in
+        	-h|-help)
+                	usage
+                	;;
+		-v)
+			VERBOSE="t"
+			shift
+			;;
+	esac
+done
+
+test $# = 0 || usage
+
+FOUND_GIT_TFS="$(which git-tfs)" && test ! "$FOUND_GIT_TFS" = "f" || die "
+$(tput setaf 1)ERROR: git-tfs could not be found. Please ensure you installed git-tfs and that
+git-tfs.exe is in your PATH.$(tput sgr0)
+"
+
+# This is here just to add some separation between the script invocation
+# and any script output.
+echo
+
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+BRANCH_TFS=$(git config --local --get tfs-remote."$(git config --local --get git-tfs-branch."$BRANCH".remote)".repository) || die "
+$(tput setaf 1)ERROR: A Git-TFS remote could not be found for this branch.$(tput sgr0)
+Did you forget to issue a $(tput setaf 15)'git-tfs-remote add'$(tput sgr0) command on '$BRANCH'?
+"
+BRANCH_UPSTREAM="$(git rev-parse --abbrev-ref "$BRANCH"@{u})"
+               
+test -n "$(get_upstream -b "$BRANCH_UPSTREAM")" || die "$(tput setaf 1)ERROR: No Git remote tracking branch found.$(tput sgr0)
+If the Git-TFS branch you're trying to synchronize is not shared on a
+centralized Git server, simply use 'git-tfs-fetch -r -x' or
+'git-tfs-pull -r -x' instead.
+
+Otherwise, please issue the following command to setup a remote tracking branch:
+
+    git branch --set-upstream-to=<remote_name>/<remote_branch_name>
+
+For example:
+
+    git branch --set-upstream-to=origin/feature/my-topic-branch
+
+"
+
+test "$VERBOSE" = "f" && test "$BRANCH" = "$(get_upstream -b "$BRANCH_UPSTREAM")" || \
+cat <<EOF
+Branch Information
+===============================================================================
+Branch name:            $BRANCH
+Upstream branch remote: $(get_upstream -r "$BRANCH_UPSTREAM")
+Upstream branch name:   $(get_upstream -b "$BRANCH_UPSTREAM")
+TFS Remote:             $BRANCH_TFS
+
+EOF
+
+test "$BRANCH" = "$(get_upstream -b "$BRANCH_UPSTREAM")" || (
+        CONTINUE=n
+        read -n 1 -p "
+$(tput setaf 11)WARNING:$(tput sgr0) Your local branch name:
+
+        $(tput setaf 10)'$BRANCH'$(tput sgr0)
+
+    is different than the remote tracking branch name:
+
+        $(tput setaf 9)'$BRANCH_UPSTREAM'$(tput sgr0)
+
+Please ensure the branch information above is correct before continuing.
+
+$(tput setaf 15)Do you want to continue synchronization?$(tput sgr0) [y|$(tput setaf 11)N$(tput sgr0)] ? " CONTINUE
+
+        case "$CONTINUE" in
+                y|Y)    echo
+                        exit 0
+                        ;;
+                *)
+                        exit 1
+                        ;;
+        esac
+) || die "
+
+$(tput setaf 1)Synchronization canceled.$(tput sgr0)
+"
+
+# Update the local copy of the destination branch from the git server
+(write_info "Updating '$BRANCH' with any upstream commits" &&
+        (
+                git fetch && \
+                git rebase "$BRANCH_UPSTREAM" && \
+                not_rebasing
+        ) || die "$REBASING_MSG"
+) || die
+
+# Update the local copy of the destination branch with any changesets in TFS but not in git
+(write_info "Updating '$BRANCH' with any new changesets from '$BRANCH_TFS'" && \
+        (
+                git tfs pull -x -r -i default && \
+                not_rebasing
+        ) || die "$REBASING_MSG"
+) || die
+
+# At this point we can minimally push the new TFS changes to origin
+(write_info "Updating '$BRANCH_UPSTREAM' with any new commits on '$BRANCH'" && \
+        git push $(get_upstream -r "$BRANCH_UPSTREAM") refs/notes/*:refs/notes/* "$BRANCH":"$(get_upstream -b "$BRANCH_UPSTREAM")"
+) || die
+
+exit
