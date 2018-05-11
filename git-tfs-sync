@@ -100,7 +100,7 @@ $(tput setaf 1)ERROR: A Git-TFS remote could not be found for this branch.$(tput
 Did you forget to issue a $(tput setaf 15)'git-tfs-remote add'$(tput sgr0) command on '$BRANCH'?
 "
 BRANCH_UPSTREAM="$(git rev-parse --abbrev-ref "$BRANCH"@{u})"
-               
+
 test -n "$(get_upstream -b "$BRANCH_UPSTREAM")" || die "$(tput setaf 1)ERROR: No Git remote tracking branch found.$(tput sgr0)
 If the Git-TFS branch you're trying to synchronize is not shared on a
 centralized Git server, simply use 'git-tfs-fetch -r -x' or
@@ -158,7 +158,7 @@ $(tput setaf 1)Synchronization canceled.$(tput sgr0)
 # Update the local copy of the destination branch from the git server
 (write_info "Updating '$BRANCH' with any upstream commits" &&
         (
-                git fetch && \
+                git fetch $(get_upstream -r "$BRANCH_UPSTREAM") "$BRANCH_UPSTREAM" && \
                 git rebase "$BRANCH_UPSTREAM" && \
                 not_rebasing
         ) || die "$REBASING_MSG"
