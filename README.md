@@ -170,7 +170,7 @@ We'll be making aliases for the following commands:
 | `tfetch`     | `git tfs fetch -x`                                   | `git tfetch`                          | Fetch the latest changesets from the TFS branch remote.                                                                                                         |
 | `tpull`      | `git tfs pull -r -x`                                 | `git tpull`                           | Pull the latest changes from the TFS branch remote to your local branch                                                                                         |
 | `tsync`      | `git tfs-sync`                                       | `git tsync`                           | A helper script to synchronize your local git branch and the upstream git branch with changes to the TFS branch.                                                |
-| `tmerge`     | `git tfs-merge`                                      | `git tmerge`                          | A helper script to update your feature's parent TFS branch and check-in your feature branch to the parent, keeping TFS and the centralized Git server in synch. |
+| `tmerge`     | `git tfs-merge-into`                                 | `git tmerge`                          | A helper script to update your feature's parent TFS branch and check-in your feature branch to the parent, keeping TFS and the centralized Git server in synch. |
 | `tco`        | `MSYS_NO_PATHCONV=1 git tfs branch --init <branch>`  | `MSYS_NO_PATHCONV=1 git tco <branch>` | Checks out the branch from TFS and pulls down the changesets to your local repo.                                                                                |
 
 Open a git bash prompt and run the following commands:
@@ -188,7 +188,7 @@ $ git config --global alias.tremote "tfs-remote"
 $ git config --global alias.tfetch "tfs fetch -x"
 $ git config --global alias.tpull "tfs pull -x"
 $ git config --global alias.tsync "tfs-sync"
-$ git config --global alias.tmerge "tfs-merge"
+$ git config --global alias.tmerge "tfs-merge-into"
 $ git config --global alias.tco "tfs branch --init"
 
 # Run this command if you want to make sure you typed everything correctly:
@@ -317,8 +317,8 @@ Now you're ready to create a local git feature branch and begin working with TFS
 > `rcheckin`.
 > 
 > Always create topic branches off of a TFS-backed git branch and commit to the topic branches. Then
-> use `git tfs-merge <git-tfs-branch-name>` (or the alias `git tmerge <git-tfs-branch-name>`) to
-> "merge" (in reality, checkin) the commit (changeset) to TFS.
+> use `git tfs-merge-into <git-tfs-branch-name>` (or the alias `git tmerge <git-tfs-branch-name>`)
+> to "merge" (in reality, checkin) the commit (changeset) to TFS.
 
 #### I Need to Checkout an Existing TFS Branch That's Not Part of the Git Repository Yet
 This recipe is for when you have cloned a Git-Tfs repository and the TFS branch you want to work off of is not yet part of the git repository, e.g. the branch was created in TFS _after_ the git-tfs repository was cloned.
@@ -342,7 +342,7 @@ These scripts ensure that your feature commits are properly "merged" into/checke
 
 > **NOTE**  
 > This recipe uses the aliases defined above in this document, as well as a helper
-> script called `git-tfs-merge` to synchronize your local copies of the remote TFS
+> script called `git-tfs-merge-into` to synchronize your local copies of the remote TFS
 > branch with TFS and the centralized Git server and your feature branch and "merge"
 > (check in) your feature branch into the parent (TFS) branch.
 
@@ -417,9 +417,9 @@ $ git push origin feature/topic_description
 # Once code review is complete, DO NOT merge the branch
 # into it's parent TFS git branch using git. Follow the steps below.
 
-# Merge the feature/topic branch back into the parent TFS branch using git-tfs-merge.
+# Merge the feature/topic branch back into the parent TFS branch using git-tfs-merge-into.
 # You should be on your feature/topic branch that you want to merge.
-$ git tmerge Path/To/Branch                    # git tfs-merge or even git-tfs-merge
+$ git tmerge Path/To/Branch                    # git tfs-merge-into or even git-tfs-merge-into
 
 # You should now be on Path/To/Branch
 ```

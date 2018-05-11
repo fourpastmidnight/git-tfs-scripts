@@ -160,7 +160,7 @@ $(tput setaf 1)Merging canceled.$(tput sgr0)
         "develop"|"master")
                 CONTINUE=n
                 read -n 1 -p "
-$(tput setaf 11)WARNING:$(tput sgr0) You are merging to $(tput setaf 13)'$DEST_BRANCH'$(tput sgr0), are you sure (y|$(tput setaf 15)N$(tput sgr0))? " CONTINUE
+$(tput setaf 11)WARNING:$(tput sgr0) You are merging into $(tput setaf 13)'$DEST_BRANCH'$(tput sgr0), are you sure (y|$(tput setaf 15)N$(tput sgr0))? " CONTINUE
                 case "$CONTINUE" in
                         y|Y)    echo
                                 exit 0
