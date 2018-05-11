@@ -111,27 +111,28 @@ case $1 in
 	;;
 esac
 
-for arg
-do
+test $# -gt 0 && {
 	case $1 in
 		bootstrap)
 			OPERATION="$1"
 			shift
 			;;
 		add)
+			echo "Current arg: $1"
 			OPERATION="$1"
 			shift
+			echo "Current arg: $1"
 			test $# = 0 || {
-				TFS_REMOTE_NAME="$1" && \
-				shift
+				TFS_REMOTE_NAME="$1"
 			}
 			;;
 		*)
 			usage
+			;;
 	esac
-done
+}
 
-test -z "$OPERATION" || {
+test -n "$OPERATION" && {
 	case $OPERATION in
 		add)
 			# If no arguments are given, check to see if there's a TFS remote with the same
