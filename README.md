@@ -101,9 +101,9 @@ You will only need to do this if there's no shared Git repository already availa
 > The `git tfs clone...` command may take a really long time to run depending on how much history there is to clone. I've had it take 3 days on my organization's rather large TFS project. Smaller TFS projects take only a few minutes to a few hours to run. See `git-tfs help clone` for additional options for cloning your TFS project collection.  
 
     ```bash
-	$ cd /d/repos
-	$ grep -Ex "User: (.*), (.*)" authors_tmp.txt | sort | uniq | sed -r 's/User: (.*), (.)(.*)/<YOUR-WINDOWS-USER-DAMIN>\\\2\1 = \2\3 \1 <\2\3\.\1@<YOUR-EMAIL-DOMAIN>\.com>/' > authors.txt
-	$ MSYS_NO_PATHCONV=1 git tfs clone -l -x --branches=all --authors=authors.txt "http://<TFS-SERVER>:8080/tfs/<URL-ENCODED-TFS-COLLECTION-NAME>" "$/<PROJECT-COLLECTION>/<BRANCH-PATH>" <GIT-REPO-NAME>
+    $ cd /d/repos
+    $ grep -Ex "User: (.*), (.*)" authors_tmp.txt | sort | uniq | sed -r 's/User: (.*), (.)(.*)/<YOUR-WINDOWS-USER-DAMIN>\\\2\1 = \2\3 \1 <\2\3\.\1@<YOUR-EMAIL-DOMAIN>\.com>/' > authors.txt
+    $ MSYS_NO_PATHCONV=1 git tfs clone -l -x --branches=all --authors=authors.txt "http://<TFS-SERVER>:8080/tfs/<URL-ENCODED-TFS-COLLECTION-NAME>" "$/<PROJECT-COLLECTION>/<BRANCH-PATH>" <GIT-REPO-NAME>
     $ cd <GIT-REPO-NAME>
     $ git remote add origin <url-to-origin>
     $ git config --local --add remote.origin.fetch +refs/notes/*:refs/notes/*
@@ -130,7 +130,7 @@ $ git clone -c core.autocrlf=false \
 
 $ cd repo
 $ cp ../authors.txt .git/git-tfs_authors        # Save the authors.txt file in the .git folder as git-tfs_authors 
-$ git checkout develop                          # You should already be on develop, but just in case...
+$ git checkout master                           # You should already be on master, but just in case...
 $ git fetch origin +refs/notes/*:refs/notes/*   # This gets work-item tracking history for the commits
 $ git tfs-remote -v bootstrap                   # Hook the branch back up to TFS and add special "tracking" information to your git configuration
 $ git tfs fetch -x                              # Get the latest TFS changesets
