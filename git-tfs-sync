@@ -158,7 +158,7 @@ $(tput setaf 1)Synchronization canceled.$(tput sgr0)
 # Update the local copy of the destination branch from the git server
 (write_info "Updating '$BRANCH' with any upstream commits" &&
         (
-                git fetch $(get_upstream -r "$BRANCH_UPSTREAM") "$BRANCH_UPSTREAM" && \
+                git fetch $(get_upstream -r "$BRANCH_UPSTREAM") && \
                 git rebase "$BRANCH_UPSTREAM" && \
                 not_rebasing
         ) || die "$REBASING_MSG"
