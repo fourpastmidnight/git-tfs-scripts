@@ -118,10 +118,8 @@ test $# -gt 0 && {
 			shift
 			;;
 		add)
-			echo "Current arg: $1"
 			OPERATION="$1"
 			shift
-			echo "Current arg: $1"
 			test $# = 0 || {
 				TFS_REMOTE_NAME="$1"
 			}

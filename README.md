@@ -109,7 +109,7 @@ You will only need to do this if there's no shared Git repository already availa
     $ git config --local --add remote.origin.fetch +refs/notes/*:refs/notes/*
     $ git config --local core.autocrlf false
     $ git config --local core.whitespace trailing-space,space-before-tab,cr-at-eol
-    $ git push -u origin master
+    $ git push -u origin refs/notes/* master
     ```
 
 Now you have a fully cloned copy of the TFS Team Project and the root branch you specified. You should treat the `master` branch as if it were an actual git `master` branch and **not make any checkins directly to this branch**. This will be discussed further, below.
